@@ -55,7 +55,7 @@ def_string $item_name = oc_name($item);
 def_int $item_value = ~adjusted_item_cost_buying($item, inv_total(%shop, $item));
 mes("<$item_name>: currently costs <tostring($item_value)>gp.");
 
-// Buy an item from the shop
+// info: Buy an item from the shop
 [label,buy_item](obj $obj, int $amount)
 def_int $i = 0;
 def_int $current_gp = inv_total(inv, coins);
@@ -96,7 +96,7 @@ while($i < $amount) {
 }
 wealth_log(^wealth_lost, $total_cost, "Bought <oc_debugname($obj)> x<tostring($i)> from <inv_debugname(%shop)> for <tostring($total_cost)> coins");
 
-// Sell an item to the shop
+// info: Sell an item to the shop
 [label,sell_item](obj $obj, int $amount)
 def_int $shop_total = inv_total(%shop, oc_uncert($obj));
 def_int $total_value = 0;
@@ -128,17 +128,18 @@ if($total_value > 0) {
     inv_add(inv, coins, $total_value);
 }
 
-[proc,price_mod](inv $inv, int $diff, obj $obj)(int)
+// info: Returns the difference from current shop stock amount compared to base stock amount
+[proc,get_stock_diff](inv $inv, int $diff, obj $obj)(int)
 def_int $base = inv_stockbase($inv, $obj);
 if($base = -1) {
     return ($diff);
 }
 return (calc($diff - $base));
 
-// Purchase cost at a specifc stack count
+// info: Returns the purchase price value at a specific stock count
 [proc,adjusted_item_cost_buying](obj $obj, int $diff)(int)
 def_int $cost = oc_cost($obj);
-def_int $value = ~calc_shop_value($cost, %shop_haggle, %shop_sell, ~price_mod(%shop, $diff, $obj));
+def_int $value = ~calc_shop_value($cost, %shop_haggle, %shop_sell, ~get_stock_diff(%shop, $diff, $obj));
 // Unlike sell values, shop purchase values can't be 0 (I believe...), not entirely sure if this is how
 // it's supposed to be handled or if the formula needs to be altered somehow
 if($value < 1) { 
@@ -146,12 +147,12 @@ if($value < 1) {
 }
 return ($value);
 
-// Sell value at a specific stack count
+// info: Returns the sell value at a specific stock count
 [proc,adjusted_item_cost_selling](obj $obj, int $diff)(int)
 def_int $cost = oc_cost($obj);
-return (~calc_shop_value($cost, %shop_haggle, %shop_buy, ~price_mod(%shop, $diff, $obj)));
+return (~calc_shop_value($cost, %shop_haggle, %shop_buy, ~get_stock_diff(%shop, $diff, $obj)));
 
-// Calculate the amount of items a player has to sell relative to a desired amount
+// info: Calculate the amount of items a player has to sell relative to a desired amount
 [proc,calculate_items_amount_sold](obj $item, int $sell_amount)(int)
 def_int $player_amount = inv_total(inv, $item);
 if ($sell_amount > $player_amount) {
@@ -169,7 +170,7 @@ return ($sell_amount);
 [inv_button3,shop_template:inv] @shop_request(%shop, last_slot, 5);
 [inv_button4,shop_template:inv] @shop_request(%shop, last_slot, 10);
 
-// verify a request to buy or sell from a shop, and then perform the transaction if all passed
+// info: verify a request to buy or sell from a shop, and then perform the transaction if all passed
 [label,shop_request](inv $shop_inv, int $slot, int $amount)
 // Check if the slot was empty.
 def_obj $item = inv_getobj($shop_inv, $slot);
@@ -179,14 +180,14 @@ if($shop_inv = %shop) {
     @sell_item($item, $amount);
 }
 
-// Calculate the gp value for the shop operation
-[proc,calc_shop_value](int $base_cost, int $shophaggle, int $shopbuy, int $int3)(int)
-def_int $int4 = 0;
-def_int $int5 = min(1000, max(-5000, calc($int3 * $shophaggle)));
-$int5 = max(100, calc($shopbuy - $int5));
-$int4 = scale($int5, 1000, $base_cost);
-if ($int4 < 0) {
-    $int4 = 2000000000;
-    error("Cost overflowed with base_cost=<tostring($base_cost)>, for %shopbuy=<tostring($shopbuy)> and %shophaggle=<tostring($shophaggle)>. Corrected to 2 billion.");
+// info: Calculate the gp value for the shop buy/sell operation based on current stock
+[proc,calc_shop_value](int $base_cost, int $delta, int $buysell_multiplier, int $stock_base_diff)(int)
+def_int $shop_price = 0;
+def_int $adjusted_multiplier = min(1000, max(-5000, calc($stock_base_diff * $delta)));
+$adjusted_multiplier = max(100, calc($buysell_multiplier - $adjusted_multiplier));
+$shop_price = scale($adjusted_multiplier, 1000, $base_cost);
+if ($shop_price < 0) {
+    $shop_price = 2000000000;
+    error("Cost overflowed with base_cost=<tostring($base_cost)>, for %shopbuy=<tostring($buysell_multiplier)> and %shophaggle=<tostring($delta)>. Corrected to 2 billion.");
 }
-return($int4);
+return($shop_price);
